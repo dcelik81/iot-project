@@ -21,6 +21,31 @@ int buzzerPin = 19;
 enum State { IDLE, MENU, ACTION };
 State currentState = MENU;
 
+TaskHandle_t animationTask;
+volatile bool isProcessing = false;
+
+void drawJumpingDots(void * parameter) {
+  int dotState = 0;
+  while (isProcessing) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(25, 20);
+    display.print("Processing");
+    
+    for (int i = 0; i < 3; i++) {
+      int y = 40;
+      if (i == dotState) y = 35; 
+      display.fillCircle(45 + (i * 15), y, 3, WHITE);
+    }
+    
+    display.display();
+    dotState = (dotState + 1) % 3;
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+  }
+  vTaskDelete(NULL);
+}
+
 void setup() {
   Serial.begin(115200);
   
@@ -177,7 +202,16 @@ void processCommand(String cmd) {
     
     // Simple JSON string construction
     String httpRequestData = "{\"voiceCommand\":\"" + cmd + "\"}";
+    
+    // Start animation task
+    isProcessing = true;
+    xTaskCreatePinnedToCore(drawJumpingDots, "AnimTask", 4096, NULL, 1, &animationTask, 0);
+    
     int httpResponseCode = http.POST(httpRequestData);
+    
+    // Stop animation task
+    isProcessing = false;
+    delay(300); // Wait for task to finish deleting itself
     
     if(httpResponseCode > 0){
       String response = http.getString();
@@ -196,5 +230,5 @@ void processCommand(String cmd) {
 void performAction() {
   playTone(1500, 100);
   waveServo();
-  currentState = IDLE;
+  currentState = MENU;
 }

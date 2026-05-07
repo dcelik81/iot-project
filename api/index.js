@@ -130,6 +130,29 @@ app.post('/command', async (req, res) => {
                 resource: event 
             });
             info.eventId = response.data.id;
+        } else if (info.action === 'delete') {
+            const calendarId = process.env.CALENDAR_ID || 'primary';
+            const searchResponse = await calendar.events.list({
+                calendarId: calendarId,
+                q: info.target,
+                timeMin: (new Date()).toISOString(),
+                maxResults: 1,
+                singleEvents: true,
+                orderBy: 'startTime',
+            });
+            
+            const events = searchResponse.data.items;
+            if (events && events.length > 0) {
+                const eventId = events[0].id;
+                await calendar.events.delete({
+                    calendarId: calendarId,
+                    eventId: eventId
+                });
+                info.deletedEventId = eventId;
+                info.message = `Deleted event matching '${info.target}'`;
+            } else {
+                info.message = `No upcoming event found matching '${info.target}'`;
+            }
         }
 
         res.json({ status: "success", action_taken: info });
