@@ -15,13 +15,13 @@ async function fetchEvents() {
         renderEvents(data.events);
     } catch (error) {
         console.error('Error fetching events:', error);
-        eventsList.innerHTML = '<p class="error">Failed to load events</p>';
+        eventsList.innerHTML = '<p class="error">Etkinlikler yüklenirken hata oluştu</p>';
     }
 }
 
 function renderEvents(events) {
     if (!events || events.length === 0) {
-        eventsList.innerHTML = '<p class="empty">No upcoming events</p>';
+        eventsList.innerHTML = '<p class="empty">Yaklaşan etkinlik yok</p>';
         return;
     }
 

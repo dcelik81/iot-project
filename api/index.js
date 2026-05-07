@@ -5,8 +5,12 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const speech = require('@google-cloud/speech');
 
 const upload = multer({ dest: 'uploads/' });
+const speechClient = new speech.SpeechClient({
+    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS || 'service-account.json'
+});
 
 dotenv.config();
 
@@ -55,7 +59,7 @@ const extractEventInfo = (command) => {
             startTime: targetDate.toISOString(),
             endTime: new Date(targetDate.getTime() + 3600000).toISOString() // 1 hour duration
         };
-    } else if (action === "sil") {
+    } else if (action === "sil" || action === "iptal" || action === "kaldır") {
         return { action: "delete", target: keywords.join(' ') };
     } else if (action === "etkinlik" || action === "listele" || action === "liste") {
         return { action: "list" };
@@ -106,13 +110,51 @@ app.get('/events', async (req, res) => {
                 timeString: timeString
             };
         });
-
         res.json({ events });
     } catch (error) {
         console.error('Error fetching events:', error);
         res.status(500).json({ error: "Calendar API error" });
     }
 });
+
+async function handleCalendarAction(info) {
+    if (info.action === 'add') {
+        const event = {
+            summary: info.summary,
+            start: { dateTime: info.startTime },
+            end: { dateTime: info.endTime },
+        };
+        const response = await calendar.events.insert({
+            calendarId: process.env.CALENDAR_ID || 'primary',
+            resource: event
+        });
+        info.eventId = response.data.id;
+    } else if (info.action === 'delete') {
+        const calendarId = process.env.CALENDAR_ID || 'primary';
+        const searchResponse = await calendar.events.list({
+            calendarId: calendarId,
+            q: info.target,
+            timeMin: (new Date()).toISOString(),
+            maxResults: 1,
+            singleEvents: true,
+            orderBy: 'startTime',
+        });
+
+        const events = searchResponse.data.items;
+        if (events && events.length > 0) {
+            const eventId = events[0].id;
+            await calendar.events.delete({
+                calendarId: calendarId,
+                eventId: eventId
+            });
+            info.deletedEventId = eventId;
+            info.message = `Deleted event matching '${info.target}'`;
+        } else {
+            info.message = `No upcoming event found matching '${info.target}'`;
+        }
+    }
+    return info;
+}
 
 app.post('/command', async (req, res) => {
     const { voiceCommand } = req.body;
@@ -123,45 +165,8 @@ app.post('/command', async (req, res) => {
     }
 
     try {
-        // Implement Google Calendar action based on 'info'
-        // Example for 'add':
-        if (info.action === 'add') {
-            const event = {
-                summary: info.summary,
-                start: { dateTime: info.startTime },
-                end: { dateTime: info.endTime },
-            };
-            const response = await calendar.events.insert({
-                calendarId: process.env.CALENDAR_ID || 'primary',
-                resource: event
-            });
-            info.eventId = response.data.id;
-        } else if (info.action === 'delete') {
-            const calendarId = process.env.CALENDAR_ID || 'primary';
-            const searchResponse = await calendar.events.list({
-                calendarId: calendarId,
-                q: info.target,
-                timeMin: (new Date()).toISOString(),
-                maxResults: 1,
-                singleEvents: true,
-                orderBy: 'startTime',
-            });
-
-            const events = searchResponse.data.items;
-            if (events && events.length > 0) {
-                const eventId = events[0].id;
-                await calendar.events.delete({
-                    calendarId: calendarId,
-                    eventId: eventId
-                });
-                info.deletedEventId = eventId;
-                info.message = `Deleted event matching '${info.target}'`;
-            } else {
-                info.message = `No upcoming event found matching '${info.target}'`;
-            }
-        }
-
-        res.json({ status: "success", action_taken: info });
+        const result = await handleCalendarAction(info);
+        res.json({ status: "success", action_taken: result });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -175,32 +180,35 @@ app.post('/transcribe', upload.single('audio'), async (req, res) => {
     const audioPath = req.file.path;
 
     try {
-        // Placeholder for STT (Speech-to-Text) logic
-        // In a real scenario, you would send this file to OpenAI Whisper or Google STT
-        console.log(`Received audio file: ${audioPath}`);
+        const fileBuffer = fs.readFileSync(audioPath);
+        const audioBytes = fileBuffer.toString('base64');
 
-        // For now, let's assume the transcription is hardcoded or simulated
-        const transcription = "etkinlik yarın saat 10da toplantı";
+        const audio = { content: audioBytes };
+        const config = {
+            encoding: 'WEBM_OPUS', // Default for MediaRecorder on most browsers
+            sampleRateHertz: 48000,
+            languageCode: 'tr-TR', // Set to Turkish
+        };
+        
+        const request = { audio: audio, config: config };
+        
+        console.log("Transcribing audio...");
+        const [response] = await speechClient.recognize(request);
+        const transcription = response.results
+            .map(result => result.alternatives[0].transcript)
+            .join('\n');
 
-        // Use the existing command logic to process the transcription
+        console.log(`Transcription: ${transcription}`);
+
         const info = extractEventInfo(transcription);
-
-        if (info && info.action === 'add') {
-            const event = {
-                summary: info.summary,
-                start: { dateTime: info.startTime },
-                end: { dateTime: info.endTime },
-            };
-            await calendar.events.insert({
-                calendarId: process.env.CALENDAR_ID || 'primary',
-                resource: event
-            });
+        let actionResult = null;
+        
+        if (info) {
+            actionResult = await handleCalendarAction(info);
         }
 
-        // Clean up the uploaded file
         fs.unlinkSync(audioPath);
-
-        res.json({ status: "success", transcription, action_taken: info });
+        res.json({ status: "success", transcription, action_taken: actionResult });
     } catch (error) {
         console.error('Transcription error:', error);
         if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
