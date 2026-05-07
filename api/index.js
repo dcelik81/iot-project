@@ -90,7 +90,7 @@ app.get('/events', async (req, res) => {
                 hours = hours % 12;
                 hours = hours ? hours : 12; 
                 const minutesStr = minutes < 10 ? '0' + minutes : minutes;
-                timeString = minutes === 0 ? `${hours}${ampm}` : `${hours}.${minutesStr}${ampm}`;
+                timeString = minutes === 0 ? `@${hours}${ampm}` : `@${hours}:${minutesStr}${ampm}`;
             } else if (event.start.date) {
                 timeString = "All Day";
             }
