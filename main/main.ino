@@ -155,8 +155,20 @@ void waveServo() {
 }
 
 void processCommand(String cmd) {
+  cmd.trim();
+  String lowerCmd = cmd;
+  lowerCmd.toLowerCase();
+
   Serial.print("Processing: ");
   Serial.println(cmd);
+
+  if (lowerCmd == "idle" || lowerCmd == "bekle") {
+    currentState = IDLE;
+    return;
+  } else if (lowerCmd == "menu" || lowerCmd == "menü") {
+    currentState = MENU;
+    return;
+  }
   
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
