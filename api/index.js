@@ -79,7 +79,28 @@ app.get('/events', async (req, res) => {
             singleEvents: true,
             orderBy: 'startTime',
         });
-        const events = response.data.items;
+        
+        const events = response.data.items.map(event => {
+            let timeString = "";
+            if (event.start.dateTime) {
+                const date = new Date(event.start.dateTime);
+                let hours = date.getHours();
+                let minutes = date.getMinutes();
+                const ampm = hours >= 12 ? 'pm' : 'am';
+                hours = hours % 12;
+                hours = hours ? hours : 12; 
+                const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+                timeString = minutes === 0 ? `${hours}${ampm}` : `${hours}.${minutesStr}${ampm}`;
+            } else if (event.start.date) {
+                timeString = "All Day";
+            }
+            
+            return {
+                summary: event.summary,
+                timeString: timeString
+            };
+        });
+
         res.json({ events });
     } catch (error) {
         console.error('Error fetching events:', error);

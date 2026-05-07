@@ -4,6 +4,7 @@
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET    -1
@@ -18,7 +19,7 @@ int servoPin = 18;
 int buzzerPin = 19;
 
 enum State { IDLE, MENU, ACTION };
-State currentState = IDLE;
+State currentState = MENU;
 
 void setup() {
   Serial.begin(115200);
@@ -105,9 +106,32 @@ void showMenu() {
     int httpResponseCode = http.GET();
     
     if(httpResponseCode > 0){
-      // We got a response
-      display.println("Events fetched OK");
-      Serial.println(http.getString()); // Print payload to serial
+      String payload = http.getString();
+      
+      DynamicJsonDocument doc(2048);
+      DeserializationError error = deserializeJson(doc, payload);
+      
+      if (error) {
+        display.println("Parse Error");
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+      } else {
+        JsonArray events = doc["events"].as<JsonArray>();
+        int count = 0;
+        for (JsonVariant v : events) {
+          if (count >= 5) break; // OLED can fit ~5-6 lines of text
+          const char* summary = v["summary"] | "No Title";
+          const char* timeStr = v["timeString"] | "";
+          
+          display.print(summary);
+          display.print(" ");
+          display.println(timeStr);
+          count++;
+        }
+        if (count == 0) {
+          display.println("No events found.");
+        }
+      }
     } else {
       display.println("Error fetching");
     }
