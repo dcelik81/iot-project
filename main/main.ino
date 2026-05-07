@@ -20,6 +20,7 @@ int buzzerPin = 19;
 
 enum State { IDLE, MENU, ACTION };
 State currentState = MENU;
+String lastMessage = "System Ready";
 
 TaskHandle_t animationTask;
 volatile bool isProcessing = false;
@@ -83,6 +84,8 @@ void setup() {
 }
 
 void loop() {
+  checkForStateChange();
+  
   switch(currentState) {
     case IDLE:
       showIdleAnimation();
@@ -123,7 +126,6 @@ void showMenu() {
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,0);
-  display.println("Calendar Events:");
   
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
@@ -138,23 +140,50 @@ void showMenu() {
       
       if (error) {
         display.println("Parse Error");
-        Serial.print("deserializeJson() failed: ");
-        Serial.println(error.c_str());
       } else {
+        const char* currentTime = doc["currentTime"] | "00:00";
+        int totalEvents = doc["count"] | 0;
         JsonArray events = doc["events"].as<JsonArray>();
+
+        // Top Section
+        display.setTextSize(1);
+        display.setCursor(5, 2);
+        display.print(lastMessage); 
+        
+        display.setCursor(5, 18);
+        display.print("YUKI");
+        
+        display.setCursor(95, 18);
+        display.print(currentTime);
+        
+        // Divider
+        display.drawLine(0, 30, 128, 30, WHITE);
+        
+        // Bottom Section
+        display.setCursor(5, 35);
+        display.print(totalEvents);
+        display.print(" Meetings Today");
+        
+        int y = 46;
         int count = 0;
         for (JsonVariant v : events) {
-          if (count >= 5) break; // OLED can fit ~5-6 lines of text
+          if (count >= 2) break; // Only room for 2 events in this layout
           const char* summary = v["summary"] | "No Title";
           const char* timeStr = v["timeString"] | "";
           
-          display.print(summary);
+          display.setCursor(5, y);
+          display.print("> ");
+          display.print(timeStr);
           display.print(" ");
-          display.println(timeStr);
+          display.print(summary);
+          
+          y += 10;
           count++;
         }
-        if (count == 0) {
-          display.println("No events found.");
+        
+        if (totalEvents == 0) {
+          display.setCursor(5, 46);
+          display.print("No upcoming events");
         }
       }
     } else {
@@ -231,4 +260,31 @@ void performAction() {
   playTone(1500, 100);
   waveServo();
   currentState = MENU;
+}
+void checkForStateChange() {
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck < 2000) return; // Check every 2 seconds
+  lastCheck = millis();
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverUrl + "/state");
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+      String payload = http.getString();
+      DynamicJsonDocument doc(256);
+      deserializeJson(doc, payload);
+      const char* serverState = doc["state"] | "";
+      
+      if (strlen(serverState) > 0) {
+        State newState = (strcmp(serverState, "IDLE") == 0) ? IDLE : MENU;
+        if (newState != currentState) {
+          currentState = newState;
+          Serial.print("Server triggered state change to: ");
+          Serial.println(serverState);
+        }
+      }
+    }
+    http.end();
+  }
 }

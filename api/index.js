@@ -1,5 +1,5 @@
-const express = require('express');
 const { google } = require('googleapis');
+const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const multer = require('multer');
@@ -19,6 +19,8 @@ app.use(express.json());
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
+let esp32State = "MENU"; // Global state tracker
+
 const PORT = process.env.PORT || 8000;
 
 // Simple Keyword NLP Logic
@@ -36,14 +38,15 @@ const extractEventInfo = (command) => {
         // Basic NLP for 'yarın' (tomorrow)
         if (lowerCmd.includes("yarın") || lowerCmd.includes("yarin")) {
             targetDate.setDate(targetDate.getDate() + 1);
-            keywords = keywords.filter(w => w.toLowerCase() !== "yarın" && w.toLowerCase() !== "yarin");
+            const yarinIndex = lowerCmd.findIndex(w => w === "yarın" || w === "yarin");
+            keywords.splice(yarinIndex, 1);
         }
 
-        // Basic NLP for 'saat' (time)
+        // Time parsing (e.g., "saat 14", "saat 14:30")
         const saatIndex = keywords.findIndex(w => w.toLowerCase() === "saat");
-        if (saatIndex !== -1 && saatIndex + 1 < keywords.length) {
+        if (saatIndex !== -1 && keywords[saatIndex + 1]) {
             const timeStr = keywords[saatIndex + 1];
-            const [hour, minute] = timeStr.split(':');
+            const [hour, minute] = timeStr.split(/[:.]/);
             targetDate.setHours(parseInt(hour, 10), minute ? parseInt(minute, 10) : 0, 0, 0);
             keywords.splice(saatIndex, 2); // Remove "saat" and the time value
         } else {
@@ -63,12 +66,16 @@ const extractEventInfo = (command) => {
         return { action: "delete", target: keywords.join(' ') };
     } else if (action === "etkinlik" || action === "listele" || action === "liste") {
         return { action: "list" };
+    } else if (action === "bekle" || action === "idle") {
+        return { action: "idle" };
+    } else if (action === "menü" || action === "menu") {
+        return { action: "menu" };
     }
 
     return null;
 };
 
-// Google Calendar API Setup (Placeholder)
+// Google Calendar API Setup
 const auth = new google.auth.GoogleAuth({
     keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
     scopes: ['https://www.googleapis.com/auth/calendar'],
@@ -78,43 +85,6 @@ const calendar = google.calendar({ version: 'v3', auth });
 
 app.get('/', (req, res) => {
     res.json({ status: "IoT Assistant API (Node.js) is running" });
-});
-
-app.get('/events', async (req, res) => {
-    try {
-        const response = await calendar.events.list({
-            calendarId: process.env.CALENDAR_ID || 'primary',
-            timeMin: (new Date()).toISOString(),
-            maxResults: 10,
-            singleEvents: true,
-            orderBy: 'startTime',
-        });
-
-        const events = response.data.items.map(event => {
-            let timeString = "";
-            if (event.start.dateTime) {
-                const date = new Date(event.start.dateTime);
-                let hours = date.getHours();
-                let minutes = date.getMinutes();
-                const ampm = hours >= 12 ? 'pm' : 'am';
-                hours = hours % 12;
-                hours = hours ? hours : 12;
-                const minutesStr = minutes < 10 ? '0' + minutes : minutes;
-                timeString = minutes === 0 ? `@${hours}${ampm}` : `@${hours}:${minutesStr}${ampm}`;
-            } else if (event.start.date) {
-                timeString = "All Day";
-            }
-
-            return {
-                summary: event.summary,
-                timeString: timeString
-            };
-        });
-        res.json({ events });
-    } catch (error) {
-        console.error('Error fetching events:', error);
-        res.status(500).json({ error: "Calendar API error" });
-    }
 });
 
 async function handleCalendarAction(info) {
@@ -152,9 +122,65 @@ async function handleCalendarAction(info) {
         } else {
             info.message = `No upcoming event found matching '${info.target}'`;
         }
+    } else if (info.action === 'idle') {
+        esp32State = "IDLE";
+        info.message = "Switching to IDLE state";
+    } else if (info.action === 'menu') {
+        esp32State = "MENU";
+        info.message = "Switching to MENU state";
     }
     return info;
 }
+
+app.get('/state', (req, res) => {
+    res.json({ state: esp32State });
+});
+
+app.get('/events', async (req, res) => {
+    try {
+        const now = new Date();
+        const response = await calendar.events.list({
+            calendarId: process.env.CALENDAR_ID || 'primary',
+            timeMin: now.toISOString(),
+            maxResults: 10,
+            singleEvents: true,
+            orderBy: 'startTime',
+        });
+
+        // Filter out events that started in the past (even if they are ongoing)
+        const events = response.data.items.filter(event => {
+            const startTime = event.start.dateTime || event.start.date;
+            return new Date(startTime) >= now;
+        }).map(event => {
+            let timeString = "";
+            if (event.start.dateTime) {
+                const date = new Date(event.start.dateTime);
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                timeString = `${hours}:${minutes}`;
+            } else if (event.start.date) {
+                timeString = "All Day";
+            }
+
+            return {
+                summary: event.summary,
+                timeString: timeString
+            };
+        });
+
+        const currentTime = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+
+        res.json({
+            events: events,
+            count: events.length,
+            currentTime: currentTime,
+            forcedState: esp32State // Let ESP32 know if it should be in a certain state
+        });
+    } catch (error) {
+        console.error('Error fetching events:', error);
+        res.status(500).json({ error: "Calendar API error" });
+    }
+});
 
 app.post('/command', async (req, res) => {
     const { voiceCommand } = req.body;
@@ -189,9 +215,9 @@ app.post('/transcribe', upload.single('audio'), async (req, res) => {
             sampleRateHertz: 48000,
             languageCode: 'tr-TR', // Set to Turkish
         };
-        
+
         const request = { audio: audio, config: config };
-        
+
         console.log("Transcribing audio...");
         const [response] = await speechClient.recognize(request);
         const transcription = response.results
@@ -202,7 +228,7 @@ app.post('/transcribe', upload.single('audio'), async (req, res) => {
 
         const info = extractEventInfo(transcription);
         let actionResult = null;
-        
+
         if (info) {
             actionResult = await handleCalendarAction(info);
         }
