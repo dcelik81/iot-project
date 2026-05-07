@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Assistant Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IoT Assistant</h1>
+            <p>Voice Remote Dashboard</p>
+        </header>
+
+        <main>
+            <div class="status-card glass">
+                <div id="status-indicator" class="indicator online"></div>
+                <span id="status-text">System Online</span>
+            </div>
+
+            <div class="voice-section">
+                <button id="voice-btn" class="voice-btn glass">
+                    <div class="mic-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                        </svg>
+                    </div>
+                </button>
+                <p id="instruction">Tap to Speak</p>
+            </div>
+
+            <div class="events-card glass">
+                <h2>Upcoming Events</h2>
+                <div id="events-list" class="events-list">
+                    <p class="loading">Fetching events...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

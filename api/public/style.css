@@ -1,0 +1,153 @@
+:root {
+    --bg-color: #0f172a;
+    --card-bg: rgba(30, 41, 59, 0.7);
+    --primary: #38bdf8;
+    --accent: #818cf8;
+    --text: #f8fafc;
+    --online: #22c55e;
+    --recording: #ef4444;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Outfit', sans-serif;
+}
+
+body {
+    background: radial-gradient(circle at top right, #1e293b, #0f172a);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+.container {
+    width: 100%;
+    max-width: 450px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+header {
+    text-align: center;
+    margin-top: 20px;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    font-weight: 600;
+    background: linear-gradient(to right, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+header p {
+    color: #94a3b8;
+    letter-spacing: 1px;
+}
+
+.glass {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.status-card {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 10px currentColor;
+}
+
+.indicator.online { color: var(--online); background: var(--online); }
+.indicator.recording { color: var(--recording); background: var(--recording); animation: pulse 1s infinite; }
+
+.voice-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 0;
+}
+
+.voice-btn {
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.3s;
+    border: none;
+    color: var(--text);
+}
+
+.voice-btn:active {
+    transform: scale(0.9);
+}
+
+.mic-icon svg {
+    width: 40px;
+    height: 40px;
+}
+
+.voice-btn.is-recording {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: var(--recording);
+}
+
+.events-card {
+    padding: 24px;
+    flex: 1;
+}
+
+.events-card h2 {
+    font-size: 1.25rem;
+    margin-bottom: 16px;
+    color: var(--primary);
+}
+
+.events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.event-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px 16px;
+    border-radius: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.event-item .time {
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 0.9rem;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+#instruction {
+    font-size: 0.9rem;
+    color: #64748b;
+}

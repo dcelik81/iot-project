@@ -2,19 +2,25 @@ const express = require('express');
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+
+const upload = multer({ dest: 'uploads/' });
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 8000;
 
 // Simple Keyword NLP Logic
 const extractEventInfo = (command) => {
     if (!command) return null;
-    
+
     let keywords = command.split(' ');
     const action = keywords[0].toLowerCase();
     keywords = keywords.slice(1); // Remove action word
@@ -22,7 +28,7 @@ const extractEventInfo = (command) => {
     if (action === "ekle") {
         let targetDate = new Date();
         const lowerCmd = keywords.map(w => w.toLowerCase());
-        
+
         // Basic NLP for 'yarın' (tomorrow)
         if (lowerCmd.includes("yarın") || lowerCmd.includes("yarin")) {
             targetDate.setDate(targetDate.getDate() + 1);
@@ -42,19 +48,19 @@ const extractEventInfo = (command) => {
         }
 
         const summary = keywords.join(' ') || "Yeni Etkinlik";
-        
-        return { 
-            action: "add", 
+
+        return {
+            action: "add",
             summary: summary,
             startTime: targetDate.toISOString(),
             endTime: new Date(targetDate.getTime() + 3600000).toISOString() // 1 hour duration
         };
     } else if (action === "sil") {
         return { action: "delete", target: keywords.join(' ') };
-    } else if (action === "etkinlik") {
+    } else if (action === "etkinlik" || action === "listele" || action === "liste") {
         return { action: "list" };
     }
-    
+
     return null;
 };
 
@@ -79,7 +85,7 @@ app.get('/events', async (req, res) => {
             singleEvents: true,
             orderBy: 'startTime',
         });
-        
+
         const events = response.data.items.map(event => {
             let timeString = "";
             if (event.start.dateTime) {
@@ -88,13 +94,13 @@ app.get('/events', async (req, res) => {
                 let minutes = date.getMinutes();
                 const ampm = hours >= 12 ? 'pm' : 'am';
                 hours = hours % 12;
-                hours = hours ? hours : 12; 
+                hours = hours ? hours : 12;
                 const minutesStr = minutes < 10 ? '0' + minutes : minutes;
                 timeString = minutes === 0 ? `@${hours}${ampm}` : `@${hours}:${minutesStr}${ampm}`;
             } else if (event.start.date) {
                 timeString = "All Day";
             }
-            
+
             return {
                 summary: event.summary,
                 timeString: timeString
@@ -122,12 +128,12 @@ app.post('/command', async (req, res) => {
         if (info.action === 'add') {
             const event = {
                 summary: info.summary,
-                start: { dateTime: info.startTime }, 
+                start: { dateTime: info.startTime },
                 end: { dateTime: info.endTime },
             };
-            const response = await calendar.events.insert({ 
-                calendarId: process.env.CALENDAR_ID || 'primary', 
-                resource: event 
+            const response = await calendar.events.insert({
+                calendarId: process.env.CALENDAR_ID || 'primary',
+                resource: event
             });
             info.eventId = response.data.id;
         } else if (info.action === 'delete') {
@@ -140,7 +146,7 @@ app.post('/command', async (req, res) => {
                 singleEvents: true,
                 orderBy: 'startTime',
             });
-            
+
             const events = searchResponse.data.items;
             if (events && events.length > 0) {
                 const eventId = events[0].id;
@@ -157,6 +163,47 @@ app.post('/command', async (req, res) => {
 
         res.json({ status: "success", action_taken: info });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/transcribe', upload.single('audio'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "No audio file uploaded" });
+    }
+
+    const audioPath = req.file.path;
+
+    try {
+        // Placeholder for STT (Speech-to-Text) logic
+        // In a real scenario, you would send this file to OpenAI Whisper or Google STT
+        console.log(`Received audio file: ${audioPath}`);
+
+        // For now, let's assume the transcription is hardcoded or simulated
+        const transcription = "etkinlik yarın saat 10da toplantı";
+
+        // Use the existing command logic to process the transcription
+        const info = extractEventInfo(transcription);
+
+        if (info && info.action === 'add') {
+            const event = {
+                summary: info.summary,
+                start: { dateTime: info.startTime },
+                end: { dateTime: info.endTime },
+            };
+            await calendar.events.insert({
+                calendarId: process.env.CALENDAR_ID || 'primary',
+                resource: event
+            });
+        }
+
+        // Clean up the uploaded file
+        fs.unlinkSync(audioPath);
+
+        res.json({ status: "success", transcription, action_taken: info });
+    } catch (error) {
+        console.error('Transcription error:', error);
+        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
         res.status(500).json({ error: error.message });
     }
 });
