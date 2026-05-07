@@ -2,11 +2,16 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
-
+#include <WiFi.h>
+#include <HTTPClient.h>
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET    -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+const char* ssid = "doğuş";
+const char* password = "probis12";
+const String serverUrl = "http://192.168.36.178:8000";
 
 Servo myServo;
 int servoPin = 18;
@@ -24,7 +29,24 @@ void setup() {
   }
   
   display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,0);
+  display.println("Connecting WiFi...");
   display.display();
+  
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi");
+  
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println("WiFi Connected!");
+  display.display();
+  delay(1000);
   
   myServo.attach(servoPin);
   pinMode(buzzerPin, OUTPUT);
@@ -76,7 +98,24 @@ void showMenu() {
   display.setTextColor(WHITE);
   display.setCursor(0,0);
   display.println("Calendar Events:");
-  // Fetch from API logic here
+  
+  if(WiFi.status() == WL_CONNECTED){
+    HTTPClient http;
+    http.begin(serverUrl + "/events");
+    int httpResponseCode = http.GET();
+    
+    if(httpResponseCode > 0){
+      // We got a response
+      display.println("Events fetched OK");
+      Serial.println(http.getString()); // Print payload to serial
+    } else {
+      display.println("Error fetching");
+    }
+    http.end();
+  } else {
+    display.println("WiFi Disconnected");
+  }
+  
   display.display();
 }
 
@@ -94,7 +133,27 @@ void waveServo() {
 void processCommand(String cmd) {
   Serial.print("Processing: ");
   Serial.println(cmd);
-  // Send to API logic here
+  
+  if(WiFi.status() == WL_CONNECTED){
+    HTTPClient http;
+    http.begin(serverUrl + "/command");
+    http.addHeader("Content-Type", "application/json");
+    
+    // Simple JSON string construction
+    String httpRequestData = "{\"voiceCommand\":\"" + cmd + "\"}";
+    int httpResponseCode = http.POST(httpRequestData);
+    
+    if(httpResponseCode > 0){
+      String response = http.getString();
+      Serial.print("API Response: ");
+      Serial.println(response);
+    } else {
+      Serial.print("Error on sending POST: ");
+      Serial.println(httpResponseCode);
+    }
+    http.end();
+  }
+  
   currentState = ACTION;
 }
 

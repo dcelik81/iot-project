@@ -15,14 +15,42 @@ const PORT = process.env.PORT || 8000;
 const extractEventInfo = (command) => {
     if (!command) return null;
     
-    const keywords = command.split(' ');
+    let keywords = command.split(' ');
     const action = keywords[0].toLowerCase();
+    keywords = keywords.slice(1); // Remove action word
 
     if (action === "ekle") {
-        const summary = keywords.slice(1).join(' ') || "Yeni Etkinlik";
-        return { action: "add", summary };
+        let targetDate = new Date();
+        const lowerCmd = keywords.map(w => w.toLowerCase());
+        
+        // Basic NLP for 'yarın' (tomorrow)
+        if (lowerCmd.includes("yarın") || lowerCmd.includes("yarin")) {
+            targetDate.setDate(targetDate.getDate() + 1);
+            keywords = keywords.filter(w => w.toLowerCase() !== "yarın" && w.toLowerCase() !== "yarin");
+        }
+
+        // Basic NLP for 'saat' (time)
+        const saatIndex = keywords.findIndex(w => w.toLowerCase() === "saat");
+        if (saatIndex !== -1 && saatIndex + 1 < keywords.length) {
+            const timeStr = keywords[saatIndex + 1];
+            const [hour, minute] = timeStr.split(':');
+            targetDate.setHours(parseInt(hour, 10), minute ? parseInt(minute, 10) : 0, 0, 0);
+            keywords.splice(saatIndex, 2); // Remove "saat" and the time value
+        } else {
+            // Default: if no specific time is given, set it to the next full hour
+            targetDate.setHours(targetDate.getHours() + 1, 0, 0, 0);
+        }
+
+        const summary = keywords.join(' ') || "Yeni Etkinlik";
+        
+        return { 
+            action: "add", 
+            summary: summary,
+            startTime: targetDate.toISOString(),
+            endTime: new Date(targetDate.getTime() + 3600000).toISOString() // 1 hour duration
+        };
     } else if (action === "sil") {
-        return { action: "delete", target: keywords.slice(1).join(' ') };
+        return { action: "delete", target: keywords.join(' ') };
     } else if (action === "etkinlik") {
         return { action: "list" };
     }
@@ -73,10 +101,14 @@ app.post('/command', async (req, res) => {
         if (info.action === 'add') {
             const event = {
                 summary: info.summary,
-                start: { dateTime: new Date().toISOString() }, // Needs better parsing
-                end: { dateTime: new Date(Date.now() + 3600000).toISOString() },
+                start: { dateTime: info.startTime }, 
+                end: { dateTime: info.endTime },
             };
-            // await calendar.events.insert({ calendarId: 'primary', resource: event });
+            const response = await calendar.events.insert({ 
+                calendarId: process.env.CALENDAR_ID || 'primary', 
+                resource: event 
+            });
+            info.eventId = response.data.id;
         }
 
         res.json({ status: "success", action_taken: info });
