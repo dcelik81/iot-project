@@ -1,14 +1,18 @@
+#include <Arduino.h>
+#include <U8g2lib.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#include "DHT.h"
+
+#define DHTPIN 4
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+// U8g2 Setup for SSD1306 128x64 I2C
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 const char* ssid = "doğuş";
 const char* password = "probis12";
@@ -20,27 +24,35 @@ int buzzerPin = 19;
 
 enum State { IDLE, MENU, ACTION };
 State currentState = MENU;
-String lastMessage = "System Ready";
+String lastMessage = "Sistem Hazır";
 
 TaskHandle_t animationTask;
 volatile bool isProcessing = false;
 
+// Function Prototypes
+void showIdleAnimation();
+void showMenu();
+void performAction();
+void checkForStateChange();
+void processCommand(String cmd);
+void playTone(int freq, int duration);
+void waveServo();
+
 void drawJumpingDots(void * parameter) {
   int dotState = 0;
   while (isProcessing) {
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(25, 20);
-    display.print("Processing");
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_6x12_tr);
+    u8g2.setCursor(25, 25);
+    u8g2.print("İşleniyor...");
     
     for (int i = 0; i < 3; i++) {
-      int y = 40;
-      if (i == dotState) y = 35; 
-      display.fillCircle(45 + (i * 15), y, 3, WHITE);
+      int y = 45;
+      if (i == dotState) y = 40; 
+      u8g2.drawFilledEllipse(45 + (i * 15), y, 3, 3);
     }
     
-    display.display();
+    u8g2.sendBuffer();
     dotState = (dotState + 1) % 3;
     vTaskDelay(200 / portTICK_PERIOD_MS);
   }
@@ -50,35 +62,32 @@ void drawJumpingDots(void * parameter) {
 void setup() {
   Serial.begin(115200);
   
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;);
-  }
+  u8g2.begin();
+  u8g2.enableUTF8Print(); // This is the magic for Turkish characters
   
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.println("Connecting WiFi...");
-  display.display();
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x12_tr);
+  u8g2.setCursor(0, 15);
+  u8g2.print("WiFi'ye Bağlanılıyor...");
+  u8g2.sendBuffer();
   
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nConnected to WiFi");
+  Serial.println("\nWiFi Bağlandı");
   
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("WiFi Connected!");
-  display.display();
+  u8g2.clearBuffer();
+  u8g2.setCursor(0, 15);
+  u8g2.print("WiFi Bağlantısı Tamam!");
+  u8g2.sendBuffer();
   delay(1000);
   
+  dht.begin();
   myServo.attach(servoPin);
   pinMode(buzzerPin, OUTPUT);
   
-  // Wave on startup
   playTone(1000, 200);
   waveServo();
 }
@@ -98,34 +107,30 @@ void loop() {
       break;
   }
   
-  // Simulate voice command via Serial for testing
   if (Serial.available()) {
-    String command = Serial.readStringUntil('\n');
-    processCommand(command);
+    String cmd = Serial.readStringUntil('\n');
+    processCommand(cmd);
   }
 }
 
 void showIdleAnimation() {
-  display.clearDisplay();
-  // Draw "Blinking Eyes"
-  display.fillCircle(40, 32, 10, WHITE); // Left Eye
-  display.fillCircle(88, 32, 10, WHITE); // Right Eye
-  display.display();
+  u8g2.clearBuffer();
+  u8g2.drawFilledEllipse(40, 32, 10, 10); // Left Eye
+  u8g2.drawFilledEllipse(88, 32, 10, 10); // Right Eye
+  u8g2.sendBuffer();
   delay(2000);
   
   // Blink
-  display.clearDisplay();
-  display.fillRect(30, 30, 20, 4, WHITE);
-  display.fillRect(78, 30, 20, 4, WHITE);
-  display.display();
+  u8g2.clearBuffer();
+  u8g2.drawBox(30, 30, 20, 4);
+  u8g2.drawBox(78, 30, 20, 4);
+  u8g2.sendBuffer();
   delay(150);
 }
 
 void showMenu() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x12_tr);
   
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
@@ -134,87 +139,63 @@ void showMenu() {
     
     if(httpResponseCode > 0){
       String payload = http.getString();
-      
       DynamicJsonDocument doc(2048);
       DeserializationError error = deserializeJson(doc, payload);
       
-      if (error) {
-        display.println("Parse Error");
-      } else {
+      if (!error) {
         const char* currentTime = doc["currentTime"] | "00:00";
         int totalEvents = doc["count"] | 0;
         JsonArray events = doc["events"].as<JsonArray>();
 
         // Top Section
-        display.setTextSize(1);
-        display.setCursor(5, 2);
-        display.print(lastMessage); 
+        u8g2.setCursor(0, 12);
+        u8g2.print("["); u8g2.print(lastMessage); u8g2.print("]");
         
-        display.setCursor(5, 18);
-        display.print("YUKI");
+        u8g2.setCursor(0, 28);
+        float t = dht.readTemperature();
+        if (isnan(t)) {
+          u8g2.print("Temp Error");
+        } else {
+          u8g2.print(t, 1);
+          u8g2.print("°C");
+        }
         
-        display.setCursor(95, 18);
-        display.print(currentTime);
+        u8g2.setCursor(100, 28);
+        u8g2.print(currentTime);
         
-        // Divider
-        display.drawLine(0, 30, 128, 30, WHITE);
+        u8g2.drawLine(0, 32, 128, 32);
         
         // Bottom Section
-        display.setCursor(5, 35);
-        display.print(totalEvents);
-        display.print(" Meetings Today");
+        u8g2.setCursor(0, 45);
+        u8g2.print("Bugün ");
+        u8g2.print(totalEvents);
+        u8g2.print(" Toplantı");
         
-        int y = 46;
+        int y = 58;
         int count = 0;
         for (JsonVariant v : events) {
-          if (count >= 2) break; // Only room for 2 events in this layout
-          const char* summary = v["summary"] | "No Title";
+          if (count >= 1) break; // Only room for 1 detailed event in this font size
+          const char* summary = v["summary"] | "Başlıksız";
           const char* timeStr = v["timeString"] | "";
           
-          display.setCursor(5, y);
-          display.print("> ");
-          display.print(timeStr);
-          display.print(" ");
-          display.print(summary);
-          
-          y += 10;
+          u8g2.setCursor(0, y);
+          u8g2.print("> ");
+          u8g2.print(timeStr);
+          u8g2.print(" ");
+          u8g2.print(summary);
           count++;
         }
-        
-        if (totalEvents == 0) {
-          display.setCursor(5, 46);
-          display.print("No upcoming events");
-        }
       }
-    } else {
-      display.println("Error fetching");
     }
     http.end();
-  } else {
-    display.println("WiFi Disconnected");
   }
-  
-  display.display();
-}
-
-void playTone(int freq, int duration) {
-  tone(buzzerPin, freq, duration);
-}
-
-void waveServo() {
-  myServo.write(0);
-  delay(500);
-  myServo.write(90);
-  delay(500);
+  u8g2.sendBuffer();
 }
 
 void processCommand(String cmd) {
   cmd.trim();
   String lowerCmd = cmd;
   lowerCmd.toLowerCase();
-
-  Serial.print("Processing: ");
-  Serial.println(cmd);
 
   if (lowerCmd == "idle" || lowerCmd == "bekle") {
     currentState = IDLE;
@@ -228,42 +209,27 @@ void processCommand(String cmd) {
     HTTPClient http;
     http.begin(serverUrl + "/command");
     http.addHeader("Content-Type", "application/json");
-    
-    // Simple JSON string construction
     String httpRequestData = "{\"voiceCommand\":\"" + cmd + "\"}";
     
-    // Start animation task
     isProcessing = true;
     xTaskCreatePinnedToCore(drawJumpingDots, "AnimTask", 4096, NULL, 1, &animationTask, 0);
     
     int httpResponseCode = http.POST(httpRequestData);
-    
-    // Stop animation task
     isProcessing = false;
-    delay(300); // Wait for task to finish deleting itself
+    delay(300);
     
     if(httpResponseCode > 0){
       String response = http.getString();
-      Serial.print("API Response: ");
       Serial.println(response);
-    } else {
-      Serial.print("Error on sending POST: ");
-      Serial.println(httpResponseCode);
     }
     http.end();
   }
-  
   currentState = ACTION;
 }
 
-void performAction() {
-  playTone(1500, 100);
-  waveServo();
-  currentState = MENU;
-}
 void checkForStateChange() {
   static unsigned long lastCheck = 0;
-  if (millis() - lastCheck < 2000) return; // Check every 2 seconds
+  if (millis() - lastCheck < 2000) return;
   lastCheck = millis();
   
   if (WiFi.status() == WL_CONNECTED) {
@@ -275,16 +241,28 @@ void checkForStateChange() {
       DynamicJsonDocument doc(256);
       deserializeJson(doc, payload);
       const char* serverState = doc["state"] | "";
-      
       if (strlen(serverState) > 0) {
         State newState = (strcmp(serverState, "IDLE") == 0) ? IDLE : MENU;
-        if (newState != currentState) {
-          currentState = newState;
-          Serial.print("Server triggered state change to: ");
-          Serial.println(serverState);
-        }
+        if (newState != currentState) currentState = newState;
       }
     }
     http.end();
   }
+}
+
+void performAction() {
+  playTone(1500, 100);
+  waveServo();
+  currentState = MENU;
+}
+
+void playTone(int freq, int duration) {
+  tone(buzzerPin, freq, duration);
+}
+
+void waveServo() {
+  myServo.write(0);
+  delay(500);
+  myServo.write(90);
+  delay(500);
 }
