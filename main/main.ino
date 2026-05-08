@@ -16,7 +16,7 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 const char* ssid = "doğuş";
 const char* password = "probis12";
-const String serverUrl = "http://192.168.36.178:8000";
+const String serverUrl = "http://192.168.154.178:8000";
 
 Servo myServo;
 int servoPin = 18;
@@ -25,6 +25,8 @@ int buzzerPin = 19;
 enum State { IDLE, MENU, ACTION };
 State currentState = MENU;
 String lastMessage = "Sistem Hazir";
+bool servoEnabled = true;
+bool buzzerEnabled = true;
 
 TaskHandle_t animationTask;
 volatile bool isProcessing = false;
@@ -245,6 +247,13 @@ void checkForStateChange() {
         State newState = (strcmp(serverState, "IDLE") == 0) ? IDLE : MENU;
         if (newState != currentState) currentState = newState;
       }
+      
+      if (doc.containsKey("servoEnabled")) {
+        servoEnabled = doc["servoEnabled"].as<bool>();
+      }
+      if (doc.containsKey("buzzerEnabled")) {
+        buzzerEnabled = doc["buzzerEnabled"].as<bool>();
+      }
     }
     http.end();
   }
@@ -257,10 +266,12 @@ void performAction() {
 }
 
 void playTone(int freq, int duration) {
+  if (!buzzerEnabled) return;
   tone(buzzerPin, freq, duration);
 }
 
 void waveServo() {
+  if (!servoEnabled) return;
   myServo.write(0);
   delay(500);
   myServo.write(90);

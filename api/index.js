@@ -20,6 +20,8 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 let esp32State = "MENU"; // Global state tracker
+let servoEnabled = true;
+let buzzerEnabled = true;
 
 const PORT = process.env.PORT || 8000;
 
@@ -133,7 +135,21 @@ async function handleCalendarAction(info) {
 }
 
 app.get('/state', (req, res) => {
-    res.json({ state: esp32State });
+    res.json({ 
+        state: esp32State, 
+        servoEnabled: servoEnabled,
+        buzzerEnabled: buzzerEnabled 
+    });
+});
+
+app.post('/settings', (req, res) => {
+    if (req.body.servoEnabled !== undefined) {
+        servoEnabled = req.body.servoEnabled;
+    }
+    if (req.body.buzzerEnabled !== undefined) {
+        buzzerEnabled = req.body.buzzerEnabled;
+    }
+    res.json({ status: "success", servoEnabled, buzzerEnabled });
 });
 
 const replaceTurkish = (text) => {

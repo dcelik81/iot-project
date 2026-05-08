@@ -121,5 +121,28 @@ voiceBtn.addEventListener('touchend', (e) => {
     stopRecording();
 });
 
+const servoToggle = document.getElementById('servo-toggle');
+const buzzerToggle = document.getElementById('buzzer-toggle');
+
+async function updateSettings() {
+    try {
+        await fetch('/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                servoEnabled: servoToggle.checked,
+                buzzerEnabled: buzzerToggle.checked 
+            })
+        });
+    } catch (error) {
+        console.error('Error updating settings:', error);
+    }
+}
+
+servoToggle.addEventListener('change', updateSettings);
+buzzerToggle.addEventListener('change', updateSettings);
+
 // Initial Load
 fetchEvents();
