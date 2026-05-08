@@ -149,33 +149,30 @@ void showMenu() {
 
         // Top Section
         u8g2.setCursor(0, 12);
-        u8g2.print("["); u8g2.print(lastMessage); u8g2.print("]");
-        
-        u8g2.setCursor(0, 28);
         float t = dht.readTemperature();
         if (isnan(t)) {
-          u8g2.drawUTF8(0, 28, "Hata");
+          u8g2.drawUTF8(0, 12, "Hata");
         } else {
           u8g2.print(t, 1);
-          u8g2.drawUTF8(u8g2.getCursorX(), 28, "\xC2\xB0" "C");
+          u8g2.drawUTF8(u8g2.getCursorX(), 12, "\xC2\xB0" "C");
         }
         
         int clockWidth = u8g2.getUTF8Width(currentTime);
-        u8g2.setCursor(128 - clockWidth - 2, 28);
+        u8g2.setCursor(128 - clockWidth - 2, 12);
         u8g2.print(currentTime);
         
-        u8g2.drawLine(0, 32, 128, 32);
+        u8g2.drawLine(0, 16, 128, 16);
         
         // Bottom Section
-        u8g2.drawUTF8(0, 46, "Bugun ");
-        u8g2.setCursor(u8g2.getUTF8Width("Bugun ") + 2, 46);
+        u8g2.drawUTF8(0, 30, "Bugun ");
+        u8g2.setCursor(u8g2.getUTF8Width("Bugun ") + 2, 30);
         u8g2.print(totalEvents);
-        u8g2.drawUTF8(u8g2.getCursorX() + 4, 46, "Toplanti");
+        u8g2.drawUTF8(u8g2.getCursorX() + 4, 30, "Toplanti");
         
-        int y = 58;
+        int y = 44;
         int count = 0;
         for (JsonVariant v : events) {
-          if (count >= 1) break; 
+          if (count >= 2) break; // Now room for 2 events
           const char* summary = v["summary"] | "Basliksiz";
           const char* timeStr = v["timeString"] | "";
           
@@ -184,6 +181,8 @@ void showMenu() {
           u8g2.print(timeStr);
           u8g2.print(" ");
           u8g2.print(summary);
+          
+          y += 14; // Move down for the next line
           count++;
         }
       }
