@@ -24,7 +24,7 @@ int buzzerPin = 19;
 
 enum State { IDLE, MENU, ACTION };
 State currentState = MENU;
-String lastMessage = "Sistem Hazır";
+String lastMessage = "Sistem Hazir";
 
 TaskHandle_t animationTask;
 volatile bool isProcessing = false;
@@ -42,9 +42,8 @@ void drawJumpingDots(void * parameter) {
   int dotState = 0;
   while (isProcessing) {
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_6x12_tr);
-    u8g2.setCursor(25, 25);
-    u8g2.print("İşleniyor...");
+    u8g2.setFont(u8g2_font_7x13_tr);
+    u8g2.drawUTF8(25, 25, "Isleniyor...");
     
     for (int i = 0; i < 3; i++) {
       int y = 45;
@@ -63,12 +62,11 @@ void setup() {
   Serial.begin(115200);
   
   u8g2.begin();
-  u8g2.enableUTF8Print(); // This is the magic for Turkish characters
+  u8g2.enableUTF8Print(); 
   
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_6x12_tr);
-  u8g2.setCursor(0, 15);
-  u8g2.print("WiFi'ye Bağlanılıyor...");
+  u8g2.setFont(u8g2_font_7x13_tr);
+  u8g2.drawUTF8(0, 15, "WiFi'ye Baglaniliyor...");
   u8g2.sendBuffer();
   
   WiFi.begin(ssid, password);
@@ -76,11 +74,11 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nWiFi Bağlandı");
+  Serial.println("\nWiFi Baglandi");
   
   u8g2.clearBuffer();
   u8g2.setCursor(0, 15);
-  u8g2.print("WiFi Bağlantısı Tamam!");
+  u8g2.print("WiFi Baglantisi Tamam!");
   u8g2.sendBuffer();
   delay(1000);
   
@@ -147,6 +145,8 @@ void showMenu() {
         int totalEvents = doc["count"] | 0;
         JsonArray events = doc["events"].as<JsonArray>();
 
+        u8g2.setFont(u8g2_font_7x13_tr);
+
         // Top Section
         u8g2.setCursor(0, 12);
         u8g2.print("["); u8g2.print(lastMessage); u8g2.print("]");
@@ -154,28 +154,29 @@ void showMenu() {
         u8g2.setCursor(0, 28);
         float t = dht.readTemperature();
         if (isnan(t)) {
-          u8g2.print("Temp Error");
+          u8g2.drawUTF8(0, 28, "Hata");
         } else {
           u8g2.print(t, 1);
-          u8g2.print("°C");
+          u8g2.drawUTF8(u8g2.getCursorX(), 28, "\xC2\xB0" "C");
         }
         
-        u8g2.setCursor(100, 28);
+        int clockWidth = u8g2.getUTF8Width(currentTime);
+        u8g2.setCursor(128 - clockWidth - 2, 28);
         u8g2.print(currentTime);
         
         u8g2.drawLine(0, 32, 128, 32);
         
         // Bottom Section
-        u8g2.setCursor(0, 45);
-        u8g2.print("Bugün ");
+        u8g2.drawUTF8(0, 46, "Bugun ");
+        u8g2.setCursor(u8g2.getUTF8Width("Bugun ") + 2, 46);
         u8g2.print(totalEvents);
-        u8g2.print(" Toplantı");
+        u8g2.drawUTF8(u8g2.getCursorX() + 4, 46, "Toplanti");
         
         int y = 58;
         int count = 0;
         for (JsonVariant v : events) {
-          if (count >= 1) break; // Only room for 1 detailed event in this font size
-          const char* summary = v["summary"] | "Başlıksız";
+          if (count >= 1) break; 
+          const char* summary = v["summary"] | "Basliksiz";
           const char* timeStr = v["timeString"] | "";
           
           u8g2.setCursor(0, y);

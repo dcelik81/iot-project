@@ -118,16 +118,16 @@ async function handleCalendarAction(info) {
                 eventId: eventId
             });
             info.deletedEventId = eventId;
-            info.message = `Deleted event matching '${info.target}'`;
+            info.message = `Silinen Etkinlik: '${info.target}'`;
         } else {
-            info.message = `No upcoming event found matching '${info.target}'`;
+            info.message = `Arama Kelimesi ile Etkinlik Bulunamadı: '${info.target}'`;
         }
     } else if (info.action === 'idle') {
         esp32State = "IDLE";
-        info.message = "Switching to IDLE state";
+        info.message = "Bekleme Moduna Geçiliyor";
     } else if (info.action === 'menu') {
         esp32State = "MENU";
-        info.message = "Switching to MENU state";
+        info.message = "Menüye Geçiliyor";
     }
     return info;
 }
@@ -135,6 +135,15 @@ async function handleCalendarAction(info) {
 app.get('/state', (req, res) => {
     res.json({ state: esp32State });
 });
+
+const replaceTurkish = (text) => {
+    if (!text) return "";
+    const map = {
+        'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I',
+        'ö': 'o', 'Ö': 'O', 'ş': 's', 'Ş': 'S', 'ü': 'u', 'Ü': 'U'
+    };
+    return text.replace(/[çÇğĞıİöÖşŞüÜ]/g, match => map[match]);
+};
 
 app.get('/events', async (req, res) => {
     try {
@@ -163,7 +172,7 @@ app.get('/events', async (req, res) => {
             }
 
             return {
-                summary: event.summary,
+                summary: replaceTurkish(event.summary),
                 timeString: timeString
             };
         });
