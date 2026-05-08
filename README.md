@@ -17,12 +17,33 @@ npm start # starts localhost:8000 server, serves dashboard and api
 npx ngrok http 8000
 ```
 
-## Flow Schema
+## Overview
 
+The ESP32 Virtual Assistant is an integrated IoT system designed to manage personal tasks and provide environmental feedback. It combines hardware sensors and actuators with a cloud-connected backend and a web-based user interface.
+
+## System Components
+
+- **ESP32 Microcontroller**: Acts as the central hub, managing sensors, actuators, and communication with the server.
+- **Web Dashboard**: Serves as the primary interface for user interaction, enabling voice commands and system configuration (toggling hardware feedback).
+- **Node.js Backend**: Handles API requests, coordinates between the ESP32 and external services (like Google Calendar), and processes voice data.
+
+## Key Features
+
+1. **Voice Recognition**: Users can issue commands using their **phone microphone through the web ui dashboard**.
+2. **Calendar Integration**: Fetches and displays upcoming events from Google Calendar on the OLED screen.
+3. **Environment Monitoring**: Real-time temperature tracking using the DHT11 sensor.
+4. **Physical Feedback**: 
+   - **Servo Motor**: Provides kinetic feedback (e.g., waving) upon command completion.
+   - **Buzzer**: Plays audio alerts and tones for system state changes.
+5. **Interactive UI (OLED)**: Features custom animations, including "blinking eyes" for idle state and "jumping dots" for processing states.
+6. **Remote Control**: The dashboard allows users to enable/disable specific hardware feedback (Servo and Buzzer) remotely.
+7. **Bidirectional Sync**: Real-time bidirectional sync with Google Calendar ensures that events added or modified via voice are immediately reflected in the cloud and on the device.
+
+### Flow Schema
 
 ```mermaid
 flowchart TD
-    A([Voice Input<br>Audio is captured via<br>INMP441 I2S microphone module])
+    A([Voice Input<br>Audio is captured via<br>phone microphone through the web ui dashboard])
     B[Process Voice Input<br>ESP32 records audio and sends WAV<br>to local server over LAN.<br>Server runs STT and LLM.]
     C{Select Task<br>Task is selected based on<br>the action field in LLM response}
     T1[Task 1<br>List Events<br>Calendar events are<br>listed on OLED]
