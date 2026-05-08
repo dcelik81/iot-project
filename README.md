@@ -1,5 +1,25 @@
 # Virtual Assistant
 
+## Requirements
+
+- [ngrok](https://ngrok.com/)
+- [nodejs](https://nodejs.org/en)
+- npm package manager
+
+## Installation
+
+```sh
+cd api ; npm i
+npm start # starts localhost:8000 server, serves dashboard and api
+
+# if you want to use the dashboard in your mobile devices
+# in another terminal
+npx ngrok http 8000
+```
+
+## Flow Schema
+
+
 ```mermaid
 flowchart TD
     A([Voice Input<br>Audio is captured via<br>INMP441 I2S microphone module])
